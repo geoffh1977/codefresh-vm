@@ -14,9 +14,9 @@
       - docker-ce
       - docker-ce-cli
       - containerd.io
-      - kubelet=1.23.4
-      - kubeadm=1.23.4
-      - kubectl=1.23.4
+      - kubelet=1.23.4-00
+      - kubeadm=1.23.4-00
+      - kubectl=1.23.4-00
 
   tasks:
 
