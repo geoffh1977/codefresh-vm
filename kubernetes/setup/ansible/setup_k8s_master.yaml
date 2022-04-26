@@ -1,0 +1,77 @@
+---
+- hosts: localhost
+  connection: local
+  become: true
+  strategy: free
+  vars:
+    packages:
+      - openssh-server
+      - nfs-common
+    pod_network_cidr: 10.244.0.0/16
+
+  tasks:
+
+    ### Install Additional Packages With The Kubernetes Master
+    - name: Update The Apt Cache With Shell
+      shell: 'apt-get update'
+      args:
+        warn: False
+
+    - name: Install Additional Packages
+      apt:
+        name: "{{ packages }}"
+        state: present
+        force: yes
+    
+    ### Execute The Kubernetes Admin Command
+    - name: Install Kubernetes Master
+      shell: "kubeadm init --apiserver-advertise-address={{ ansible_default_ipv4.address }} --pod-network-cidr={{ pod_network_cidr }} --node-name={{ ansible_facts.hostname }}"
+      args:
+        warn: False
+        creates: /etc/kubernetes/admin.conf
+
+    ### Execute The Kubernetes Create Join Command
+    - name: Create Kubernetes Node Join Command
+      shell: "kubeadm token create --print-join-command > /root/k8s-setup/node_join_cluster.sh"
+      args:
+        warn: False
+        creates: /root/k8s-setup/node_join_cluster.sh
+
+    - name: Change File Ownership Of Crate Join File
+      file:
+        path: /root/k8s-setup/node_join_cluster.sh
+        owner: root
+        group: root
+        mode: '0750'
+
+    ### Copy The Admin File To The Root User
+    - name: Ensure Root Kube Config Directory Is Present
+      file:
+        path: /root/.kube
+        state: directory
+
+    - name: Copy Kubernetes Config To Root Config Path
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        owner: root
+        group: root
+        mode: '0640'
+    
+    ### Copy Admin Connection File To Temp
+    - name: Copy file with owner and permissions
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /tmp/kube.config
+        owner: root
+        group: root
+        mode: '0644'
+
+    ### Add Cluster Setup Commands
+    - name: Download Kubernetes Cluster Setup Script
+      get_url:
+        url: https://raw.githubusercontent.com/geoffh1977/codefresh-vm/main/kubernetes/setup/scripts/setup_cluster.sh
+        dest: /root/k8s-setup/setup_cluster.sh
+        owner: root
+        group: root
+        mode: 0755

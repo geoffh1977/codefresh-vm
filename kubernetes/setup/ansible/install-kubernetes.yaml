@@ -1,0 +1,138 @@
+---
+- hosts: localhost
+  connection: local
+  become: true
+  strategy: free
+  vars:
+    dependencies:
+      - apt-transport-https
+      - gnupg2
+      - curl
+      - ca-certificates
+
+    packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - kubelet=1.23.4
+      - kubeadm=1.23.4
+      - kubectl=1.23.4
+
+  tasks:
+
+    ### Check Dependencies And Install Software
+    - name: Install Required Dependencies
+      apt:
+        name: "{{ dependencies }}"
+        force: yes
+
+    - name: Add Docker Signing Key
+      shell: 'curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg'
+      args:
+        creates: /usr/share/keyrings/docker-archive-keyring.gpg
+        warn: False
+
+    - name: Add Kubernetes Signing Key
+      get_url:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        dest: /usr/share/keyrings/kubernetes-archive-keyring.gpg
+        mode: 0644
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: 'deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian bullseye stable'
+        filename: docker-archive
+        state: present
+
+    - name: Add Kubernetes Repository
+      apt_repository:
+        repo: 'deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main'
+        state: present
+
+    - name: Update The Apt Cache With Shell
+      shell: 'apt-get update'
+      args:
+        warn: False
+
+    - name: Install Application Packages
+      apt:
+        name: "{{ packages }}"
+        state: present
+        force: yes
+
+    ### Copy Configuration And Setup Services
+    - name: Download Docker Daemon Config
+      get_url:
+        url: https://raw.githubusercontent.com/geoffh1977/codefresh-vm/main/kubernetes/setup/config/daemon.json
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Ensure Docker System Directory Present
+      file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+
+    - name: Restart Docker
+      systemd:
+        name: docker
+        state: restarted
+        daemon_reload: yes
+
+    - name: Disable Active Swap
+      shell: 'swapoff -a'
+
+    - name: Disable Swap In Fstab
+      lineinfile:
+        path: /etc/fstab
+        state: absent
+        regexp: "^.*swap"
+
+    - name: Ensure Bridge Module Loaded
+      lineinfile:
+        path: /etc/modules-load.d/k8s.conf
+        state: present
+        create: true
+        line: br_netfilter
+
+    - name: Enable IPV4 Bridge Visibility For Kubernetes
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    - name: Enable IPV6 Bridge Visibility For Kubernetes
+      sysctl:
+        name: net.bridge.bridge-nf-call-ip6tables
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    ### Post Install Commands
+    - name: Ensure Kubernetes Setup Directory Is Present
+      file:
+        path: /root/k8s-setup
+        state: directory
+    
+    - name: Download Kubernetes Master Setup Script
+      get_url:
+        url: https://raw.githubusercontent.com/geoffh1977/codefresh-vm/main/kubernetes/setup/ansible/setup_k8s_master.yaml
+        dest: /root/k8s-setup/setup_k8s_master.yaml
+        owner: root
+        group: root
+        mode: 0640
+
+    - name: Download Kubernetes Master Execution Script
+      get_url:
+        url: https://raw.githubusercontent.com/geoffh1977/codefresh-vm/main/kubernetes/setup/scripts/setup_k8s_master.sh
+        dest: /root/k8s-setup/setup_k8s_master.sh
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Grant First System User Docker Access
+      shell: 'usermod -aG $(ls -c /home | head -n1)'

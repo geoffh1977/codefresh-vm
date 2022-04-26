@@ -1,0 +1,11 @@
+[Unit]
+Description=Install Kubernetes On First Boot
+Wants=network-online.target
+After=network.target network-online.target
+
+[Service]
+Type=simple
+ExecStart=/root/k8s-install.sh
+
+[Install]
+WantedBy=multi-user.target
