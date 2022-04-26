@@ -25,7 +25,7 @@
     
     ### Execute The Kubernetes Admin Command
     - name: Install Kubernetes Master
-      shell: "kubeadm init --apiserver-advertise-address={{ ansible_default_ipv4.address }} --pod-network-cidr={{ pod_network_cidr }} --node-name={{ ansible_facts.hostname }}"
+      shell: "kubeadm init --kubernetes-version=v1.23.4 --apiserver-advertise-address={{ ansible_default_ipv4.address }} --pod-network-cidr={{ pod_network_cidr }} --node-name={{ ansible_facts.hostname }}"
       args:
         warn: False
         creates: /etc/kubernetes/admin.conf
